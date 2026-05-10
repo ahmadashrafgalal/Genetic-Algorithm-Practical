@@ -2,8 +2,10 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 
+from .GeneticAlgorithmBase import GeneticAlgorithmBase
 
-class TSP:
+
+class TSP(GeneticAlgorithmBase):
 
     def __init__(
         self,
@@ -15,6 +17,7 @@ class TSP:
         elite_size=1,
         seed=42
     ):
+        super().__init__(population_size, generations, mutation_rate)
 
         np.random.seed(seed)
         random.seed(seed)
@@ -29,13 +32,7 @@ class TSP:
             axis=2
         )
 
-        self.population_size = population_size
-        self.generations = generations
-        self.mutation_rate = mutation_rate
         self.elite_size = elite_size
-
-        self.population = []
-        self.history = []
 
         self.best_cost_overall = float('inf')
         self.best_chrom_overall = None
@@ -105,7 +102,7 @@ class TSP:
 
         return self.normalize(child)
 
-    def mutate(self, chrom):
+    def mutation(self, chrom):
 
         if random.random() < self.mutation_rate:
 
@@ -159,7 +156,7 @@ class TSP:
             )
 
             child = self.crossover(p1, p2)
-            child = self.mutate(child)
+            child = self.mutation(child)
 
             new_population.append(child)
 

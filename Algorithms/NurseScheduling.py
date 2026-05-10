@@ -2,8 +2,10 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
+from .GeneticAlgorithmBase import GeneticAlgorithmBase
 
-class NurseScheduling:
+
+class NurseScheduling(GeneticAlgorithmBase):
 
     def __init__(
         self,
@@ -15,19 +17,13 @@ class NurseScheduling:
         generations=50,
         mutation_rate=0.3
     ):
+        super().__init__(population_size, generations, mutation_rate)
 
         self.num_nurses = num_nurses
         self.days = days
 
         self.shifts = shifts
         self.max_shifts = max_shifts
-
-        self.population_size = population_size
-        self.generations = generations
-        self.mutation_rate = mutation_rate
-
-        self.population = []
-        self.history = []
 
     def create_individual(self):
 
@@ -90,7 +86,7 @@ class NurseScheduling:
 
         return child
 
-    def mutate(self, individual):
+    def mutation(self, individual):
 
         if random.random() < self.mutation_rate:
 
@@ -127,7 +123,7 @@ class NurseScheduling:
 
                 child = self.crossover(p1, p2)
 
-                child = self.mutate(child)
+                child = self.mutation(child)
 
                 new_population.append(child)
 

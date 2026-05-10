@@ -2,8 +2,10 @@ import random
 import math
 import matplotlib.pyplot as plt
 
+from .GeneticAlgorithmBase import GeneticAlgorithmBase
 
-class VRP:
+
+class VRP(GeneticAlgorithmBase):
 
     def __init__(
         self,
@@ -14,18 +16,12 @@ class VRP:
         generations=100,
         mutation_rate=0.1
     ):
+        super().__init__(population_size, generations, mutation_rate)
 
         self.depot = depot
         self.customers = customers
         self.customer_ids = list(customers.keys())
         self.num_vehicles = num_vehicles
-
-        self.population_size = population_size
-        self.generations = generations
-        self.mutation_rate = mutation_rate
-
-        self.population = []
-        self.history = []
 
     def distance(self, p1, p2):
 
@@ -116,7 +112,7 @@ class VRP:
 
         return child
 
-    def mutate(self, individual):
+    def mutation(self, individual):
 
         if random.random() < self.mutation_rate:
 
@@ -147,7 +143,7 @@ class VRP:
                 p2 = self.selection(population)
 
                 child = self.crossover(p1, p2)
-                child = self.mutate(child)
+                child = self.mutation(child)
 
                 new_population.append(child)
 

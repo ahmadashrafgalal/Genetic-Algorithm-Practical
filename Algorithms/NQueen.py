@@ -1,8 +1,10 @@
 import random
 import matplotlib.pyplot as plt
 
+from .GeneticAlgorithmBase import GeneticAlgorithmBase
 
-class NQueens:
+
+class NQueens(GeneticAlgorithmBase):
 
     def __init__(
         self,
@@ -11,15 +13,9 @@ class NQueens:
         generations=200,
         mutation_rate=0.01
     ):
+        super().__init__(population_size, generations, mutation_rate)
 
         self.n = n
-
-        self.population_size = population_size
-        self.generations = generations
-        self.mutation_rate = mutation_rate
-
-        self.population = []
-        self.history = []
 
     def create_individual(self):
 
@@ -91,7 +87,7 @@ class NQueens:
 
         return child
 
-    def mutate(self, individual):
+    def mutation(self, individual):
 
         if random.random() < self.mutation_rate:
 
@@ -127,7 +123,7 @@ class NQueens:
 
                 child = self.crossover(p1, p2)
 
-                child = self.mutate(child)
+                child = self.mutation(child)
 
                 new_population.append(child)
 

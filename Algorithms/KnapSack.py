@@ -1,8 +1,10 @@
 import random
 import matplotlib.pyplot as plt
 
+from .GeneticAlgorithmBase import GeneticAlgorithmBase
 
-class Knapsack:
+
+class Knapsack(GeneticAlgorithmBase):
 
     def __init__(
         self,
@@ -14,19 +16,15 @@ class Knapsack:
         generations=30,
         mutation_rate=0.1
     ):
+        super().__init__(population_size, generations, mutation_rate)
 
         self.items = items
         self.values = values
         self.weights = weights
         self.capacity = capacity
 
-        self.population_size = population_size
-        self.generations = generations
-        self.mutation_rate = mutation_rate
-
         self.num_items = len(items)
 
-        self.population = []
         self.best_fitness_history = []
 
 
