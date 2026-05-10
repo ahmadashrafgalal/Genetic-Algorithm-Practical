@@ -42,27 +42,31 @@ class NurseScheduling(GeneticAlgorithmBase):
         ]
 
     def fitness(self, individual):
-
         penalty = 0
 
+        # 1. Check max shifts per nurse (Your original rule)
         for nurse in individual:
-
             work_days = np.count_nonzero(nurse)
-
             if work_days > self.max_shifts:
+                penalty += (work_days - self.max_shifts) * 2
 
-                penalty += (
-                    work_days - self.max_shifts
-                ) * 2
-
+        # 2. Check strict shift coverage per day
         for day in range(self.days):
-
-            if np.all(individual[:, day] == 0):
-
+            daily_shifts = individual[:, day]
+            
+            # Penalize if a specific shift is missing completely
+            if 1 not in daily_shifts:  # No Morning nurse assigned
                 penalty += 5
+            if 2 not in daily_shifts:  # No Evening nurse assigned
+                penalty += 5
+            if 3 not in daily_shifts:  # No Night nurse assigned
+                penalty += 5
+                
+            # Penalize if NO ONE is working at all (Your original rule, made stricter)
+            if np.all(daily_shifts == 0):
+                penalty += 10
 
         return -penalty
-
     def selection(self, population):
 
         return max(
