@@ -294,25 +294,154 @@ elif algorithm == "🗺️ Traveling Salesperson (TSP)":
 
 # --- 3. Vehicle Routing (VRP) ---
 elif algorithm == "🚚 Vehicle Routing (VRP)":
-    st.write("**What is this?** Similar to the Traveling Salesperson, but here we have multiple delivery trucks (vehicles) starting from a main depot. The algorithm organizes routes for all trucks to serve all customers efficiently.")
+    st.write("**What is this?** Similar to the Traveling Salesperson, but here we have multiple delivery trucks starting from a main depot. **Click on the map** below. Your **FIRST click** will be the Main Depot (HQ), and the rest will be delivery locations. The AI will dispatch the vehicles efficiently!")
     
-    if st.button("Run Algorithm"):
-        with st.spinner("Routing vehicles..."):
-            depot = (0, 0)
-            customers = {1: (2, 3), 2: (5, 4), 3: (1, 7), 4: (6, 8), 5: (3, 6)}
-            vrp = VRP(depot=depot, customers=customers, num_vehicles=2)
-            best = vrp.run()
-            routes = vrp.get_routes(best)
+    # 1. تهيئة الذاكرة للـ VRP
+    if "vrp_cities" not in st.session_state:
+        st.session_state.vrp_cities = []
+    if "show_vrp_results" not in st.session_state:
+        st.session_state.show_vrp_results = False
+    if "vrp_data" not in st.session_state:
+        st.session_state.vrp_data = {}
+
+    st.markdown("### 📍 Drop your Depot & Delivery Points:")
+    
+    # تحديد عدد العربيات
+    num_vehicles = st.number_input("🚐 Number of Delivery Vehicles:", min_value=1, max_value=10, value=2)
+    
+    m_input = folium.Map(location=[29.0661, 31.0994], zoom_start=13)
+    
+    # رسم الدبابيس (النقطة الأولى Depot والباقي Customers)
+    for i, city in enumerate(st.session_state.vrp_cities):
+        is_depot = (i == 0)
+        marker_color = "darkblue" if is_depot else "red"
+        marker_icon = "home" if is_depot else "info-sign"
+        popup_text = "🏢 Main Depot" if is_depot else f"Customer {i}"
+        
+        folium.Marker(
+            location=city,
+            popup=popup_text,
+            icon=folium.Icon(color=marker_color, icon=marker_icon)
+        ).add_to(m_input)
+
+    map_data = st_folium(m_input, width=800, height=400, key="vrp_input_map")
+    
+    # حفظ الإحداثيات
+    if map_data and map_data.get("last_clicked"):
+        lat = map_data["last_clicked"]["lat"]
+        lng = map_data["last_clicked"]["lng"]
+        if [lat, lng] not in st.session_state.vrp_cities:
+            st.session_state.vrp_cities.append([lat, lng])
+            st.session_state.show_vrp_results = False
+            st.rerun()
+
+    if st.button("🗑️ Clear Map") and len(st.session_state.vrp_cities) > 0:
+        st.session_state.vrp_cities = []
+        st.session_state.show_vrp_results = False
+        st.rerun()
+
+    # 3. تشغيل الخوارزمية
+    if st.button("🚀 Dispatch Vehicles (Run)"):
+        if len(st.session_state.vrp_cities) < 3:
+            st.error("Please add at least 1 Depot and 2 Customers (total 3 points).")
+        else:
+            with st.spinner("AI is calculating optimal routes for your fleet..."):
+                # استخراج الـ Depot والـ Customers من الإدخالات
+                raw_coords = st.session_state.vrp_cities
+                depot = tuple(raw_coords[0])
+                customers = {i+1: tuple(raw_coords[i+1]) for i in range(len(raw_coords)-1)}
+                
+                # تشغيل خوارزمية VRP
+                vrp = VRP(depot=depot, customers=customers, num_vehicles=num_vehicles, population_size=40, generations=100)
+                
+                # المسار العشوائي (بترتيب الإدخال)
+                naive_chrom = list(customers.keys())
+                naive_cost = 1 / vrp.fitness(naive_chrom)
+                naive_routes = vrp.get_routes(naive_chrom)
+                
+                # المسار المحسن
+                best_chrom = vrp.run()
+                optimized_cost = 1 / vrp.fitness(best_chrom)
+                optimized_routes = vrp.get_routes(best_chrom)
+                
+                saved_percent = 0
+                if naive_cost > 0:
+                    saved_percent = ((naive_cost - optimized_cost) / naive_cost) * 100
+                
+                st.session_state.vrp_data = {
+                    "depot": depot,
+                    "customers": customers,
+                    "naive_routes": naive_routes,
+                    "optimized_routes": optimized_routes,
+                    "naive_cost": naive_cost,
+                    "optimized_cost": optimized_cost,
+                    "saved_percent": saved_percent,
+                    "num_vehicles": num_vehicles
+                }
+                st.session_state.show_vrp_results = True
+
+    # 4. عرض النتائج الثابتة
+    if st.session_state.show_vrp_results:
+        data = st.session_state.vrp_data
+        
+        st.success(f"Fleet Dispatched! {data['num_vehicles']} vehicles routed.")
+        
+        stats_html = textwrap.dedent(f"""
+        <div style="display: flex; justify-content: space-between; background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; border-left: 8px solid #9b59b6;">
+            <div style="text-align: center;">
+                <div style="color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;">Original Fleet Distance</div>
+                <div style="color: #e74c3c; font-size: 24px; font-weight: 900;">{data['naive_cost']:.2f} <span style="font-size: 14px;">km</span></div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;">Optimized Fleet Distance</div>
+                <div style="color: #2ecc71; font-size: 24px; font-weight: 900;">{data['optimized_cost']:.2f} <span style="font-size: 14px;">km</span></div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;">Fuel/Distance Saved</div>
+                <div style="color: #f39c12; font-size: 24px; font-weight: 900;">{data['saved_percent']:.1f}%</div>
+            </div>
+        </div>
+        """)
+        st.markdown(stats_html, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        # قائمة ألوان لتمييز كل سيارة
+        route_colors = ['green', 'purple', 'orange', 'cadetblue', 'darkred', 'black', 'darkgreen', 'blue']
+        
+        with col1:
+            st.markdown("<h4 style='text-align: center; color: #e74c3c;'>❌ Before (Naive Dispatch)</h4>", unsafe_allow_html=True)
+            m_before = folium.Map(location=[29.0661, 31.0994], zoom_start=13)
             
-            st.success("Done!")
-            for i, r in enumerate(routes):
-                st.write(f"🚐 **Vehicle {i+1} Route:** {' ➡️ '.join(['Depot'] + [f'Customer {x}' for x in r] + ['Depot'])}")
+            folium.Marker(data['depot'], popup="🏢 Depot", icon=folium.Icon(color="darkblue", icon="home")).add_to(m_before)
+            for cid, coords in data['customers'].items():
+                folium.Marker(coords, popup=f"Cust {cid}", icon=folium.Icon(color="red", icon="info-sign")).add_to(m_before)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                vrp.plot(routes)
-            with col2:
-                vrp.plot_convergence()
+            # رسم مسار كل سيارة قبل التحسين
+            for idx, route in enumerate(data['naive_routes']):
+                if not route: continue
+                path = [data['depot']] + [data['customers'][c] for c in route] + [data['depot']]
+                color = route_colors[idx % len(route_colors)]
+                plugins.AntPath(locations=path, color=color, weight=5, delay=800, dash_array="10").add_to(m_before)
+                
+            st_folium(m_before, width=400, height=350, key="vrp_before")
+
+        with col2:
+            st.markdown("<h4 style='text-align: center; color: #2ecc71;'>✨ After (AI Optimized Dispatch)</h4>", unsafe_allow_html=True)
+            m_after = folium.Map(location=[29.0661, 31.0994], zoom_start=13)
+            
+            folium.Marker(data['depot'], popup="🏢 Depot", icon=folium.Icon(color="darkblue", icon="home")).add_to(m_after)
+            for cid, coords in data['customers'].items():
+                folium.Marker(coords, popup=f"Cust {cid}", icon=folium.Icon(color="red", icon="info-sign")).add_to(m_after)
+            
+            # رسم مسار كل سيارة بعد التحسين بألوان مميزة
+            for idx, route in enumerate(data['optimized_routes']):
+                if not route: continue
+                path = [data['depot']] + [data['customers'][c] for c in route] + [data['depot']]
+                color = route_colors[idx % len(route_colors)]
+                plugins.AntPath(locations=path, color=color, weight=5, delay=400).add_to(m_after)
+                
+            st_folium(m_after, width=400, height=350, key="vrp_after")
 
 # --- 4. N-Queens ---
 elif algorithm == "👑 N-Queens":
