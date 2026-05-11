@@ -722,25 +722,240 @@ elif algorithm == "🏥 Nurse Scheduling":
 
 # --- 6. Graph Coloring ---
 elif algorithm == "🎨 Graph Coloring":
-    st.write("**What is this?** Imagine a map or a network of connected dots. The algorithm tries to color every dot using a limited number of colors, ensuring that no two connected dots share the same color.")
+    import numpy as np
+    import math
+    import random
+    import networkx as nx
     
-    if st.button("Run Algorithm"):
-        with st.spinner("Coloring the graph..."):
-            G = nx.Graph()
-            edges = [(0,1),(0,2),(1,2),(1,3),(2,3),(3,4),(4,5),(5,0)]
-            G.add_edges_from(edges)
+    st.write("**What is this?** The goal is to color the nodes of a graph so that **no two connected nodes share the same color**. The AI tries to resolve all conflicts while using the minimum number of colors.")
+
+    # 1. تهيئة الذاكرة
+    if "gc_matrix" not in st.session_state:
+        st.session_state.gc_matrix = None
+        st.session_state.gc_before = None
+        st.session_state.gc_after = None
+        st.session_state.gc_stats = None
+
+    # 2. أدوات بناء الشبكة
+    col_in1, col_in2 = st.columns(2)
+    num_nodes = col_in1.slider("🔵 Number of Nodes", min_value=5, max_value=20, value=8)
+    density = col_in2.slider("🕸️ Connection Density", min_value=0.2, max_value=1.0, value=0.4, step=0.1)
+
+    # 3. دالة بناء الـ SVG التفاعلي (HTML/JS)
+    def get_graph_html(adj_matrix, colors, title, is_optimized):
+        header_color = "#2ecc71" if is_optimized else "#e74c3c"
+        n = len(adj_matrix)
+        
+        palette = [
+            "#3498db", "#e74c3c", "#f1c40f", "#2ecc71", "#9b59b6",
+            "#e67e22", "#1abc9c", "#34495e", "#ff9ff3", "#feca57",
+            "#ff6b6b", "#48dbfb", "#1dd1a1", "#5f27cd", "#c8d6e5",
+            "#ff9f43", "#01a3a4", "#ff6b81", "#7bed9f", "#70a1ff"
+        ]
+        
+        width = 400
+        height = 400
+        center_x, center_y = width // 2, height // 2
+        radius = 150
+        
+        coords = []
+        for i in range(n):
+            angle = 2 * math.pi * i / n
+            x = center_x + radius * math.cos(angle)
+            y = center_y + radius * math.sin(angle)
+            coords.append((x, y))
             
-            gc = GraphColoring(graph=G, num_colors=3)
-            best_solution = gc.run()
+        html = f"""
+        <style>
+            .graph-container {{ position: relative; width: {width}px; height: {height}px; margin: 0 auto; background-color: #fdfefe; border-radius: 15px; border: 1px solid #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
+            .edge {{ transition: stroke 0.3s, opacity 0.3s, stroke-width 0.3s; stroke-linecap: round; }}
             
-            st.success("Done!")
-            st.write(f"**Colors assigned to nodes (0 to 5):** {best_solution}")
+            .node-group {{ transition: transform 0.2s ease-out; cursor: pointer; }}
+            .node-group:hover {{ transform: scale(1.2); }}
             
-            col1, col2 = st.columns(2)
-            with col1:
-                gc.visualize(best_solution)
-            with col2:
-                gc.plot_history()
+            @keyframes pulse-conflict {{
+                0% {{ stroke-width: 2px; opacity: 0.8; stroke: #e74c3c; }}
+                50% {{ stroke-width: 6px; opacity: 1; stroke: #ff0000; filter: drop-shadow(0 0 5px rgba(231,76,60,0.8)); }}
+                100% {{ stroke-width: 2px; opacity: 0.8; stroke: #e74c3c; }}
+            }}
+            
+            .conflict-edge {{ animation: pulse-conflict 1s infinite; }}
+            
+            /* لما نعمل هوفر والخط يطفي، نوقف النبض عشان التشتيت */
+            .conflict-edge.dimmed {{ animation: none !important; opacity: 0.1 !important; stroke: #e74c3c !important; stroke-width: 2px !important; }}
+            
+            /* الخطوط العادية لما تتنور */
+            .normal-edge.highlight-edge {{ stroke-width: 4px !important; opacity: 1 !important; stroke: #34495e !important; }}
+            
+            /* خطوط المشاكل لما تتنور (نحافظ على النبض والأحمر) */
+            .conflict-edge.highlight-edge {{ opacity: 1 !important; }}
+            
+            .dimmed {{ opacity: 0.1 !important; }}
+        </style>
+        
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center;">
+            <h3 style="color: {header_color}; margin-bottom: 15px;">{title}</h3>
+            <div class="graph-container">
+                <svg width="{width}" height="{height}" style="overflow: visible;">
+        """
+        
+        conflicts = 0
+        edges_html = ""
+        for i in range(n):
+            for j in range(i+1, n):
+                if adj_matrix[i][j] == 1:
+                    x1, y1 = coords[i]
+                    x2, y2 = coords[j]
+                    
+                    is_conflict = (colors[i] == colors[j])
+                    if is_conflict: conflicts += 1
+                    
+                    edge_class = "edge conflict-edge" if is_conflict else "edge normal-edge"
+                    edge_color = "#e74c3c" if is_conflict else "#bdc3c7"
+                    edge_width = "3" if is_conflict else "1.5"
+                    
+                    edges_html += f'<line class="{edge_class}" data-source="{i}" data-target="{j}" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{edge_color}" stroke-width="{edge_width}"></line>'
+        
+        # وضعنا الخطوط في طبقة (Group) لوحدها
+        html += '<g class="edges-layer">' + edges_html + '</g>'
+        
+        nodes_html = ""
+        for i in range(n):
+            x, y = coords[i]
+            color = palette[colors[i] % len(palette)]
+            
+            nodes_html += f"""
+            <g class="node-group" data-id="{i}" style="transform-origin: {x}px {y}px;">
+                <circle cx="{x}" cy="{y}" r="18" fill="{color}" stroke="#fff" stroke-width="3" filter="drop-shadow(0 2px 4px rgba(0,0,0,0.2))"></circle>
+                <text x="{x}" y="{y+5}" font-size="12" font-weight="bold" fill="#fff" text-anchor="middle" pointer-events="none">{i}</text>
+            </g>
+            """
+            
+        # وضعنا العقد في طبقة (Group) لوحدها عشان تفضل دايماً فوق الخطوط
+        html += '<g class="nodes-layer">' + nodes_html + '</g>'
+        
+        html += """
+                </svg>
+            </div>
+            <p style="text-align: center; font-size: 13px; color: #7f8c8d; margin-top: 15px; font-weight: bold;">
+                🖱️ Hover over any Node to isolate its connections. <span style="color:#e74c3c">Pulsing Red lines</span> are conflicts!
+            </p>
+        </div>
+
+        <script>
+            const nodeGroups = document.querySelectorAll('.node-group');
+            const edges = document.querySelectorAll('.edge');
+
+            nodeGroups.forEach(group => {
+                group.addEventListener('mouseenter', function() {
+                    const id = this.getAttribute('data-id');
+                    
+                    nodeGroups.forEach(g => g.classList.add('dimmed'));
+                    edges.forEach(e => e.classList.add('dimmed'));
+                    
+                    this.classList.remove('dimmed');
+                    
+                    edges.forEach(e => {
+                        const source = e.getAttribute('data-source');
+                        const target = e.getAttribute('data-target');
+                        
+                        if (source === id || target === id) {
+                            e.classList.remove('dimmed');
+                            e.classList.add('highlight-edge');
+                            
+                            // السطر السحري: سحب الخط ليظهر فوق باقي الخطوط
+                            e.parentNode.appendChild(e);
+                            
+                            const neighborId = source === id ? target : source;
+                            document.querySelector(`.node-group[data-id="${neighborId}"]`).classList.remove('dimmed');
+                        }
+                    });
+                });
+
+                group.addEventListener('mouseleave', function() {
+                    nodeGroups.forEach(g => g.classList.remove('dimmed'));
+                    edges.forEach(e => {
+                        e.classList.remove('dimmed');
+                        e.classList.remove('highlight-edge');
+                    });
+                });
+            });
+        </script>
+        """
+        return html, conflicts
+
+    # 4. أزرار التحكم
+    btn_col1, btn_col2 = st.columns(2)
+    
+    with btn_col1:
+        if st.button("🎲 Generate Random Graph"):
+            adj_matrix = np.zeros((num_nodes, num_nodes), dtype=int)
+            for i in range(num_nodes):
+                for j in range(i+1, num_nodes):
+                    if random.random() < density:
+                        adj_matrix[i][j] = 1
+                        adj_matrix[j][i] = 1
+                        
+            random_colors = [random.randint(0, max(2, num_nodes//2)) for _ in range(num_nodes)]
+            
+            st.session_state.gc_matrix = adj_matrix
+            st.session_state.gc_before = random_colors
+            st.session_state.gc_after = None
+            st.rerun()
+
+    with btn_col2:
+        if st.button("🚀 Optimize Colors (Run AI)"):
+            if st.session_state.gc_matrix is None:
+                st.error("Please Generate a Random Graph first!")
+            else:
+                with st.spinner("AI is resolving conflicts and minimizing colors..."):
+                    matrix = st.session_state.gc_matrix
+                    nx_graph = nx.from_numpy_array(matrix)
+                    
+                    gc_algo = GraphColoring(graph=nx_graph, population_size=50, generations=100)
+                    best_coloring = gc_algo.run()
+                    
+                    st.session_state.gc_after = best_coloring
+                    st.rerun()
+
+    # 5. عرض النتائج
+    if st.session_state.gc_matrix is not None:
+        st.markdown("<hr>", unsafe_allow_html=True)
+        
+        matrix = st.session_state.gc_matrix
+        before_colors = st.session_state.gc_before
+        after_colors = st.session_state.gc_after
+        
+        total_edges = int(np.sum(matrix) / 2)
+        
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            html_before, conflicts_before = get_graph_html(matrix, before_colors, "❌ Before (Random Colors)", False)
+            used_colors_before = len(set(before_colors))
+            
+            st.markdown(f"""
+            <div style="background-color: #fdedec; padding: 15px; border-radius: 10px; text-align: center; border-left: 5px solid #e74c3c; margin-bottom: 15px;">
+                <div style="color: #c0392b; font-weight: bold;">🚨 Conflicts: <span style="font-size: 20px;">{conflicts_before}</span></div>
+                <div style="color: #7f8c8d; font-size: 14px;">Colors Used: {used_colors_before} | Edges: {total_edges}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            components.html(html_before, height=550)
+
+        with col_g2:
+            if after_colors is not None:
+                html_after, conflicts_after = get_graph_html(matrix, after_colors, "✨ After (AI Optimized)", True)
+                used_colors_after = len(set(after_colors))
+                
+                st.markdown(f"""
+                <div style="background-color: #eafaf1; padding: 15px; border-radius: 10px; text-align: center; border-left: 5px solid #2ecc71; margin-bottom: 15px;">
+                    <div style="color: #27ae60; font-weight: bold;">✅ Conflicts: <span style="font-size: 20px;">{conflicts_after}</span></div>
+                    <div style="color: #7f8c8d; font-size: 14px;">Colors Used: {used_colors_after} | Edges: {total_edges}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                components.html(html_after, height=550)
 
 # --- 7. Feature Selection ---
 elif algorithm == "📊 Feature Selection":
