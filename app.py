@@ -1120,17 +1120,199 @@ elif algorithm == "📊 Feature Selection":
         except Exception as e:
             st.error(f"Error: {e}")
 
-# --- 8. Particle Swarm (PSO) ---
+# --- 8. Particle Swarm Optimization (PSO) ---
 elif algorithm == "🦅 Particle Swarm (PSO)":
-    st.write("**What is this?** Inspired by a flock of birds finding food, this algorithm creates a 'swarm' of particles that fly around a complex mathematical landscape. They communicate with each other to find the absolute lowest point (the best solution).")
-    
-    if st.button("Run Algorithm"):
+    import numpy as np
+    class PSORecorder:
+
+        def __init__(self, pso):
+            self.pso = pso
+            self.particles_history = []
+            self.gbest_history = []
+
+        def run(self):
+
+            self.pso.initialize_swarm()
+
+            swarm = self.pso.swarm
+
+            gbest_particle = min(
+                swarm,
+                key=lambda p: p.best_fitness
+            )
+
+            gbest_position = gbest_particle.best_position.copy()
+
+            gbest_fitness = gbest_particle.best_fitness
+
+            for _ in range(self.pso.max_iter):
+
+                for p in swarm:
+
+                    r1 = np.random.rand(self.pso.dimensions)
+                    r2 = np.random.rand(self.pso.dimensions)
+
+                    p.velocity = (
+                        self.pso.w * p.velocity
+                        + self.pso.c1 * r1 * (p.best_position - p.position)
+                        + self.pso.c2 * r2 * (gbest_position - p.position)
+                    )
+
+                    p.position += p.velocity
+                    p.position = np.clip(
+                        p.position,
+                        self.pso.min_bound,
+                        self.pso.max_bound
+                    )
+
+                    p.fitness = self.pso.cost_function(p.position)
+
+                    if p.fitness < p.best_fitness:
+                        p.best_position = p.position.copy()
+                        p.best_fitness = p.fitness
+
+                    if p.fitness < gbest_fitness:
+                        gbest_fitness = p.fitness
+                        gbest_position = p.position.copy()
+
+                self.particles_history.append(
+                    np.array([p.position.copy() for p in swarm])
+                )
+
+                self.gbest_history.append(
+                    gbest_position.copy()
+                )
+
+    def build_3d_pso_animation(recorder, func, bounds):
+
+        import plotly.graph_objects as go
+        import numpy as np
+
+        x = np.linspace(bounds[0], bounds[1], 80)
+        y = np.linspace(bounds[0], bounds[1], 80)
+
+        X, Y = np.meshgrid(x, y)
+        Z = np.array([[func([xi, yi]) for xi, yi in zip(row_x, row_y)]
+                    for row_x, row_y in zip(X, Y)])
+
+        frames = []
+
+        for i in range(len(recorder.particles_history)):
+
+            pos = recorder.particles_history[i]
+            gbest = recorder.gbest_history[i]
+
+            z_particles = np.array([
+                func(np.array(p)) for p in pos
+            ])
+
+            frames.append(
+                go.Frame(
+                    data=[
+
+                        go.Surface(
+                            x=X,
+                            y=Y,
+                            z=Z,
+                            colorscale="Viridis",
+                            showscale=False,
+                            opacity=0.9
+                        ),
+
+                        go.Scatter3d(
+                            x=pos[:,0],
+                            y=pos[:,1],
+                            z=z_particles,
+                            mode="markers",
+                            marker=dict(size=4, color="white")
+                        ),
+
+                        go.Scatter3d(
+                            x=[gbest[0]],
+                            y=[gbest[1]],
+                            z=[func(np.array(gbest))],
+                            mode="markers",
+                            marker=dict(size=10, color="red")
+                        )
+                    ],
+
+                    traces=[0,1,2]
+                )
+            )
+
+        fig = go.Figure(
+            data=frames[0].data,
+            frames=frames
+        )
+
+        fig.update_layout(
+            scene=dict(
+                xaxis_title="X",
+                yaxis_title="Y",
+                zaxis_title="Fitness",
+                aspectmode="cube"
+            ),
+
+            height=750,
+
+            updatemenus=[
+
+                dict(
+                    type="buttons",
+                    buttons=[
+
+                        dict(
+                            label="▶ Play",
+                            method="animate",
+                            args=[None, {
+                                "frame": {"duration": 50, "redraw": False},
+                                "transition": {"duration": 0}
+                            }]
+                        )
+                    ]
+                )
+            ]
+        )
+
+        return fig
+
+
+    st.write("**What is this?** Particles (birds) fly through a mathematical landscape to find the global minimum. The background colors represent height (Dark = Low, Light = High).")
+
+    pop = st.slider("Particles", 10, 50, 30)
+    iters = st.slider("Iterations", 20, 150, 80)
+
+    bounds = [-5, 5]
+
+    if st.button("🚀 Run"):
         with st.spinner("Swarm is searching..."):
-            pso = PSO()
-            best_position, best_fitness = pso.run()
-            
-            st.success("Done!")
+  
+            pso = PSO(
+                population=pop,
+                max_iter=iters,
+                min_bound=bounds[0],
+                max_bound=bounds[1]
+            )
+
+            recorder = PSORecorder(pso)
+
+            recorder.run()
+
+            fig = build_3d_pso_animation(
+                recorder,
+                pso.cost_function,
+                bounds
+            )
+
+            # Retrieve best position and fitness after run
+            best_position = recorder.gbest_history[-1]
+            best_fitness = min([p.best_fitness for p in pso.swarm])
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+                config={"staticPlot": False}
+            )
             st.write(f"**Best Position Found:** {best_position}")
             st.write(f"**Lowest Value (Fitness):** {best_fitness:.6f}")
-            
-            pso.plot_history()
+                        

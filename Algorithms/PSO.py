@@ -38,7 +38,8 @@ class PSO:
         self.history = []
 
     def cost_function(self, x):
-
+        x = np.array(x)
+        
         a = 20
         b = 0.2
         c = 2 * math.pi
