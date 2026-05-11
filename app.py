@@ -7,6 +7,8 @@ import textwrap
 import folium
 from streamlit_folium import st_folium
 from folium import plugins
+import streamlit.components.v1 as components
+import random
 
 # Import your algorithms
 from Algorithms.KnapSack import Knapsack
@@ -446,21 +448,122 @@ elif algorithm == "🚚 Vehicle Routing (VRP)":
 # --- 4. N-Queens ---
 elif algorithm == "👑 N-Queens":
     st.write("**What is this?** A classic puzzle. The goal is to place 8 Chess Queens on a chessboard so that none of them can attack each other. This means no two queens can share the same row, column, or diagonal.")
+
+    # 1. تهيئة الذاكرة للرقعة العشوائية والحل
+    if "nq_before" not in st.session_state:
+        st.session_state.nq_before = [random.randint(0, 7) for _ in range(8)]
+    if "nq_after" not in st.session_state:
+        st.session_state.nq_after = None
+
+    # دالة لبناء رقعة الشطرنج التفاعلية بالـ HTML/JS
+    def get_chess_html(board, title):
+        html = f"""
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center;">
+            <h3 style="color: #2c3e50; margin-bottom: 10px;">{title}</h3>
+            <div style="display: inline-grid; grid-template-columns: repeat(8, 45px); border: 4px solid #2c3e50; box-shadow: 0 6px 12px rgba(0,0,0,0.3);">
+        """
+        for r in range(8):
+            for c in range(8):
+                # تحديد لون المربع (أبيض أو أسود)
+                color_class = "white" if (r + c) % 2 == 0 else "black"
+                bg_color = "#f0d9b5" if color_class == "white" else "#b58863"
+                has_queen = (board[r] == c)
+                
+                # استخدام رمز الملكة الكلاسيكي
+                content = "♛" if has_queen else ""
+                
+                # تصميم المربع وإضافة box-sizing لمنع تداخل الأبعاد
+                html += f"""
+                <div class="square" data-row="{r}" data-col="{c}"
+                     style="width: 45px; height: 45px; background-color: {bg_color};
+                            display: flex; align-items: center; justify-content: center;
+                            font-size: 34px; color: #111; text-shadow: 0px 2px 4px rgba(255,255,255,0.5);
+                            cursor: pointer; user-select: none; transition: all 0.15s ease-in-out; box-sizing: border-box;">
+                     {content}
+                </div>"""
+                
+        html += """
+            </div>
+            <p style="font-size: 13px; color: #7f8c8d; margin-top: 15px; font-weight: bold;">
+                🖱️ Hover over any ♛ to see its attack paths!
+            </p>
+        </div>
+
+        <script>
+            const squares = document.querySelectorAll('.square');
+            
+            squares.forEach(sq => {
+                sq.addEventListener('mouseenter', function() {
+                    // لو المربع اللي وقفنا عليه جواه Queen
+                    if (this.innerText.includes('♛')) {
+                        const qRow = parseInt(this.dataset.row);
+                        const qCol = parseInt(this.dataset.col);
+
+                        squares.forEach(s => {
+                            const r = parseInt(s.dataset.row);
+                            const c = parseInt(s.dataset.col);
+
+                            // لو المربع ده في نفس الصف أو العمود أو القطر
+                            if (r === qRow || c === qCol || Math.abs(r - qRow) === Math.abs(c - qCol)) {
+                                
+                                // تحديد الملكة اللي الماوس واقف عليها بلون ذهبي مع عازل أسود رفيع
+                                if (r === qRow && c === qCol) {
+                                    s.style.boxShadow = 'inset 0 0 0 1px #B9F8CF, inset 0 0 0 4px #f1c40f, inset 0 0 15px rgba(241, 196, 15, 0.5)';
+                                    return;
+                                }
+
+                                // لو المسار ده فيه Queen تانية -> إطار أحمر داخلي وتوهج وعازل أسود (Conflict)
+                                if (s.innerText.includes('♛')) {
+                                    s.style.boxShadow = 'inset 0 0 0 1px #B9F8CF, inset 0 0 0 4px #e74c3c, inset 0 0 15px rgba(231, 76, 60, 0.6)';
+                                } 
+                                // لو المسار فاضي -> إطار أخضر داخلي وتوهج وعازل أسود (Safe)
+                                else {
+                                    s.style.boxShadow = 'inset 0 0 0 1px #B9F8CF, inset 0 0 0 4px #2ecc71, inset 0 0 15px rgba(46, 204, 113, 0.4)';
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // لما الماوس يبعد، نمسح الإطارات الداخلية كلها
+                sq.addEventListener('mouseleave', function() {
+                    squares.forEach(s => {
+                        s.style.boxShadow = 'none';
+                    });
+                });
+            });
+        </script>
+        """
+        return html
+
+    # أزرار التحكم
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🎲 Shuffle Random Board"):
+            st.session_state.nq_before = [random.randint(0, 7) for _ in range(8)]
+            st.session_state.nq_after = None
+            st.rerun()
+            
+    with col_btn2:
+        if st.button("🚀 Run AI Algorithm"):
+            with st.spinner("AI is placing the queens..."):
+                # تشغيل الخوارزمية من ملف NQueen.py
+                queens = NQueens(n=8, population_size=100, generations=200)
+                best_solution = queens.run()
+                st.session_state.nq_after = best_solution
+
+    st.markdown("<hr>", unsafe_allow_html=True)
     
-    if st.button("Run Algorithm"):
-        with st.spinner("Placing queens..."):
-            queens = NQueens(n=8, population_size=100, generations=200)
-            best_solution = queens.run()
-            
-            st.success("Done!")
-            conflicts = -queens.fitness(best_solution)
-            st.write(f"**Remaining Conflicts (Threats):** {conflicts} (0 means perfect solution!)")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                queens.plot_board(best_solution)
-            with col2:
-                queens.plot_history()
+    # عرض الرقعتين
+    col_board1, col_board2 = st.columns(2)
+    
+    with col_board1:
+        components.html(get_chess_html(st.session_state.nq_before, "❌ Before (Random)"), height=500)
+        
+    with col_board2:
+        if st.session_state.nq_after is not None:
+            components.html(get_chess_html(st.session_state.nq_after, "✨ After (AI Solved)"), height=500)
+
 
 # --- 5. Nurse Scheduling ---
 elif algorithm == "🏥 Nurse Scheduling":
