@@ -959,23 +959,166 @@ elif algorithm == "🎨 Graph Coloring":
 
 # --- 7. Feature Selection ---
 elif algorithm == "📊 Feature Selection":
-    st.write("**What is this?** In Artificial Intelligence, we often have too much data. This algorithm acts like a smart filter, picking only the most important features (variables) to make accurate predictions, ignoring the useless noise.")
-    
-    if st.button("Run Algorithm"):
-        with st.spinner("Finding best features..."):
-            X, y = make_friedman1(n_samples=200, n_features=10, noise=0.1)
-            ga = FeatureSelection(X=X, y=y, model=LinearRegression(), task="regression")
-            best = ga.run()
+    import pandas as pd
+    import time
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.metrics import accuracy_score
+    from sklearn.preprocessing import LabelEncoder
+    from Algorithms.FeatureSelection import FeatureSelection 
+    import streamlit.components.v1 as components
+
+    st.write("**What is this?** The AI acts as a smart filter for a **Bank Loan Approval System**. Instead of overwhelming the predictive model with all 13 customer details, the Genetic Algorithm finds the perfect subset of features to maximize accuracy and drop the noise.")
+
+    # 1. تهيئة الذاكرة للنتائج الحقيقية
+    if "fs_run" not in st.session_state:
+        st.session_state.fs_run = False
+
+    # قائمة الميزات بالأيقونات الحقيقية من FontAwesome
+    features_list = [
+        {"id": "credit.policy", "icon": "<i class='fas fa-file-contract'></i>"},
+        {"id": "purpose", "icon": "<i class='fas fa-bullseye'></i>"},
+        {"id": "int.rate", "icon": "<i class='fas fa-chart-line'></i>"},
+        {"id": "installment", "icon": "<i class='fas fa-money-bill-wave'></i>"},
+        {"id": "log.annual.inc", "icon": "<i class='fas fa-sack-dollar'></i>"},
+        {"id": "dti", "icon": "<i class='fas fa-balance-scale'></i>"},
+        {"id": "fico", "icon": "<i class='fas fa-star'></i>"},
+        {"id": "days.with.cr.line", "icon": "<i class='fas fa-calendar-alt'></i>"},
+        {"id": "revol.bal", "icon": "<i class='fas fa-credit-card'></i>"},
+        {"id": "revol.util", "icon": "<i class='fas fa-chart-pie'></i>"},
+        {"id": "inq.last.6mths", "icon": "<i class='fas fa-search'></i>"},
+        {"id": "delinq.2yrs", "icon": "<i class='fas fa-exclamation-triangle'></i>"},
+        {"id": "pub.rec", "icon": "<i class='fas fa-landmark'></i>"}
+    ]
+
+    # 2. دالة بناء البطاقات (مكتوبة بدون مسافات بادئة لمنع مشكلة الـ Code Box)
+    def get_features_html(features, is_optimized, selected_subset=None):
+        header_color = "#2ecc71" if is_optimized else "#e74c3c"
+        title = "✨ AI Optimizing..." if is_optimized else "❌ Initial State (Using All Features)"
+        
+        if selected_subset is None:
+            selected_subset = [f["id"] for f in features]
+
+        html = "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'>"
+        html += "<style>"
+        html += ".features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; padding: 15px; background: #f8f9fa; border-radius: 10px; border: 1px solid #eee; }"
+        html += ".f-card { background: white; border: 2px solid #bdc3c7; border-radius: 8px; padding: 10px; text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: all 0.3s ease; height: 75px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }"
+        html += ".f-icon { font-size: 24px; margin-bottom: 8px; }"
+        html += ".f-name { font-size: 11px; font-weight: bold; color: #34495e; word-wrap: break-word; }"
+        html += ".card-active { border-color: #3498db; background-color: #ebf5fb; color: #3498db; }"
+        html += ".card-selected { border-color: #2ecc71; background-color: #eafaf1; border-width: 3px; color: #2ecc71; }"
+        html += "@keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 75% { transform: translateX(-3px); } 100% { transform: translateX(0); } }"
+        html += ".card-dropped { border-color: #bdc3c7; background-color: #fdfefe; opacity: 0.4; filter: grayscale(100%); color: #7f8c8d; }"
+        html += ".card-dropped:hover { animation: shake 0.3s ease-in-out; opacity: 0.8; filter: grayscale(0%); border-color: #e74c3c; }"
+        html += "</style>"
+
+        html += "<div style='margin-bottom: 20px;'>"
+        html += f"<h4 style='color: {header_color}; text-align: center; margin-bottom: 10px;'>{title}</h4>"
+        html += "<div class='features-grid'>"
+        
+        for f in features:
+            if not is_optimized:
+                card_class = "card-active"
+            else:
+                is_selected = f['id'] in selected_subset
+                card_class = "card-selected" if is_selected else "card-dropped"
+                
+            html += f"<div class='f-card {card_class}'><div class='f-icon'>{f['icon']}</div><div class='f-name'>{f['id']}</div></div>"
             
-            st.success("Done!")
-            features = ga.get_selected_features(best)
-            st.write(f"**Selected Important Features:** {features}")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                ga.plot_features(best)
-            with col2:
-                ga.plot_history()
+        html += "</div></div>"
+        return html
+
+    # دالة الإحصائيات (مكتوبة بشكل متصل لمنع الـ Code Box)
+    def get_stats_html(gen_text, current_features, orig_acc_pct, current_acc, speed_gain):
+        html = "<div style='display: flex; justify-content: space-around; background-color: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; border-left: 8px solid #f39c12; font-family: sans-serif;'>"
+        html += "<div style='text-align: center; border-right: 2px solid #eee; padding-right: 15px; width: 25%;'>"
+        html += "<div style='color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;'>Generation</div>"
+        html += f"<div style='font-size: 24px; font-weight: 900; color: #f39c12;'>{gen_text}</div></div>"
+        html += "<div style='text-align: center; border-right: 2px solid #eee; padding-right: 15px; width: 25%;'>"
+        html += "<div style='color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;'>Features Used</div>"
+        html += f"<div style='font-size: 24px; font-weight: 900;'><span style='color: #e74c3c;'>13</span> ➔ <span style='color: #2ecc71;'>{current_features}</span></div></div>"
+        html += "<div style='text-align: center; border-right: 2px solid #eee; padding-right: 15px; width: 25%;'>"
+        html += "<div style='color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;'>Model Accuracy (F1)</div>"
+        html += f"<div style='font-size: 24px; font-weight: 900;'><span style='color: #e74c3c;'>{orig_acc_pct:.1f}%</span> ➔ <span style='color: #2ecc71;'>{current_acc:.1f}%</span></div></div>"
+        html += "<div style='text-align: center; width: 25%;'>"
+        html += "<div style='color: #7f8c8d; font-size: 12px; font-weight: bold; text-transform: uppercase;'>Est. Speed Gain</div>"
+        html += f"<div style='color: #2ecc71; font-size: 24px; font-weight: 900;'>⚡ {speed_gain:.1f}%</div></div>"
+        html += "</div>"
+        return html
+
+    # 3. زر التشغيل (التنفيذ الديناميكي مع تحديث الـ UI لحظياً)
+    if st.button("🚀 Run Real Genetic Feature Selection"):
+        try:
+            # قراءة ومعالجة الداتا
+            df = pd.read_csv("loan_data.csv")
+            if 'purpose' in df.columns and df['purpose'].dtype == 'object':
+                df['purpose'] = LabelEncoder().fit_transform(df['purpose'])
+            X = df.drop('not.fully.paid', axis=1)
+            y = df['not.fully.paid']
+
+            # تهيئة الخوارزمية (5 أجيال)
+            rf_model = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
+            fs_algo = FeatureSelection(X=X.values, y=y.values, model=rf_model, task="classification", population_size=10, generations=5)
+
+            # حساب الدقة الأصلية
+            rf_original = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
+            rf_original.fit(fs_algo.X_train, fs_algo.y_train)
+            original_accuracy = accuracy_score(fs_algo.y_test, rf_original.predict(fs_algo.X_test))
+            orig_acc_pct = original_accuracy * 100
+
+            # أماكن الـ UI الديناميكية
+            lottie_placeholder = st.empty() 
+            stats_placeholder = st.empty()
+            cards_placeholder = st.empty()
+
+            # تشغيل Lottie Animation أثناء المعالجة
+            lottie_html = """
+            <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.10/dist/dotlottie-wc.js" type="module"></script>
+            <div style="display: flex; justify-content: center; align-items: center; height: 100%;">
+                <dotlottie-wc src="https://lottie.host/662e5b74-efb0-49e7-8ddd-0c1cb263ef0b/XEWJlmt9b2.lottie" style="width: 250px; height: 250px" autoplay loop></dotlottie-wc>
+            </div>
+            """
+            with lottie_placeholder.container():
+                components.html(lottie_html, height=260)
+
+            # 4. عرض النتائج المبنية على المعالجة الحقيقية (البداية)
+            stats_placeholder.markdown(get_stats_html("Start", 13, orig_acc_pct, orig_acc_pct, 0.0), unsafe_allow_html=True)
+            cards_placeholder.markdown(get_features_html(features_list, False), unsafe_allow_html=True)
+
+            # اللوب بتاع الخوارزمية
+            population = fs_algo.create_population()
+            for gen in range(fs_algo.generations):
+                new_population = []
+                for _ in range(fs_algo.population_size):
+                    p1 = fs_algo.selection(population)
+                    p2 = fs_algo.selection(population)
+                    child = fs_algo.crossover(p1, p2)
+                    child = fs_algo.mutation(child)
+                    new_population.append(child)
+                population = new_population
+                
+                # استخراج أفضل حل في الجيل
+                best_sol = max(population, key=fs_algo.fitness)
+                current_acc = fs_algo.fitness(best_sol) * 100
+                selected_idx = fs_algo.get_selected_features(best_sol)
+                current_best_features = [X.columns[i] for i in selected_idx]
+                
+                # حماية برمجية
+                if len(current_best_features) == 0:
+                    current_best_features = list(X.columns)
+                    
+                speed_gain = ((13 - len(current_best_features)) / 13) * 100
+
+                # تحديث الشاشة مع الجيل الجديد
+                stats_placeholder.markdown(get_stats_html(f"#{gen+1}", len(current_best_features), orig_acc_pct, current_acc, speed_gain), unsafe_allow_html=True)
+                cards_placeholder.markdown(get_features_html(features_list, True, current_best_features), unsafe_allow_html=True)
+                
+            # إخفاء الأنيميشن بعد انتهاء الـ 5 أجيال
+            lottie_placeholder.empty()
+            st.success("Evolution finished! Final optimized model is ready.")
+            st.session_state.fs_run = True
+
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # --- 8. Particle Swarm (PSO) ---
 elif algorithm == "🦅 Particle Swarm (PSO)":
