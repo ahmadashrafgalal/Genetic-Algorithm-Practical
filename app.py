@@ -564,25 +564,161 @@ elif algorithm == "👑 N-Queens":
         if st.session_state.nq_after is not None:
             components.html(get_chess_html(st.session_state.nq_after, "✨ After (AI Solved)"), height=500)
 
-
 # --- 5. Nurse Scheduling ---
 elif algorithm == "🏥 Nurse Scheduling":
-    st.write("**What is this?** Hospitals need to assign shifts to nurses. The algorithm organizes a schedule that covers all necessary hospital shifts while ensuring nurses aren't overworked.")
+    import numpy as np
     
-    if st.button("Run Algorithm"):
-        with st.spinner("Generating schedule..."):
-            scheduler = NurseScheduling(num_nurses=4, days=5)
+    st.write("**What is this?** Hospitals need to assign shifts to nurses. The AI ensures every single day has full coverage for Morning, Evening, and Night shifts while keeping the workload fair.")
+
+    if "ns_before" not in st.session_state:
+        st.session_state.ns_before = None
+    if "ns_after" not in st.session_state:
+        st.session_state.ns_after = None
+    if "ns_stats" not in st.session_state:
+        st.session_state.ns_stats = None
+
+    col_in1, col_in2 = st.columns(2)
+    num_nurses = col_in1.number_input("👩‍⚕️ Number of Nurses", min_value=3, max_value=20, value=4)
+    num_days = col_in2.number_input("📅 Number of Days", min_value=3, max_value=14, value=5)
+    max_shifts_allowed = 4 
+
+    def get_roster_html(schedule, title, is_optimized):
+        header_color = "#2ecc71" if is_optimized else "#e74c3c"
+        
+        # 1. حساب المشاكل لكل ممرضة ولكل يوم لربطها بالـ Hover
+        uncovered_days = []
+        for d in range(num_days):
+            col_data = schedule[:, d]
+            is_uncovered = not (1 in col_data and 2 in col_data and 3 in col_data)
+            uncovered_days.append("true" if is_uncovered else "false")
+            
+        overworked_nurses = []
+        for n in range(num_nurses):
+            is_overworked = np.count_nonzero(schedule[n]) > max_shifts_allowed
+            overworked_nurses.append("true" if is_overworked else "false")
+        
+        # 2. تعديل الـ CSS لإضافة الألوان الشرطية
+        html = f"""
+        <style>
+            .roster-table th, .roster-table td {{ transition: background-color 0.2s; }}
+            .highlight-row {{ background-color: #e8f4f8 !important; }}
+            .highlight-col {{ background-color: #e8f4f8 !important; }}
+            .header-hover {{ cursor: pointer; background-color: #34495e !important; }}
+            
+            /* ألوان الهوفر للممرضين (أخضر لو سليم، أحمر لو Overworked) */
+            .nurse-header[data-overworked="false"]:hover {{ background-color: #1abc9c !important; }}
+            .nurse-header[data-overworked="true"]:hover {{ background-color: #e74c3c !important; }}
+            
+            /* ألوان الهوفر للأيام (أخضر لو سليم، أحمر لو Uncovered) */
+            .day-header[data-uncovered="false"]:hover {{ background-color: #1abc9c !important; }}
+            .day-header[data-uncovered="true"]:hover {{ background-color: #e74c3c !important; }}
+        </style>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+            <h3 style="color: {header_color}; text-align: center; margin-bottom: 15px;">{title}</h3>
+            <div style="border-radius: 10px; overflow: hidden; box-shadow: 0 4px 8px rgba(0,0,0,0.1); border: 1px solid #ddd;">
+                <table class="roster-table" style="width: 100%; border-collapse: collapse; background-color: white;">
+                    <thead>
+                        <tr style="background-color: #2c3e50; color: white;">
+                            <th style="padding: 12px; border: 1px solid #34495e;">Nurse \ Day</th>
+        """
+        
+        # إضافة الـ data-uncovered لرؤوس الأيام
+        for d in range(num_days):
+            html += f'<th class="day-header header-hover" data-col="{d+1}" data-uncovered="{uncovered_days[d]}" style="padding: 12px; border: 1px solid #34495e;">Day {d+1}</th>'
+        html += "</tr></thead><tbody>"
+
+        badges = {
+            0: '<span style="color: #a4b0be; font-weight: bold;">🛏️ OFF</span>',
+            1: '<span style="background-color: #fff2cc; color: #f39c12; padding: 4px 8px; border-radius: 10px; font-size: 11px;">☀️ MORN</span>',
+            2: '<span style="background-color: #ffeaa7; color: #d35400; padding: 4px 8px; border-radius: 10px; font-size: 11px;">🌆 EVE</span>',
+            3: '<span style="background-color: #c8d6e5; color: #222f3e; padding: 4px 8px; border-radius: 10px; font-size: 11px;">🌙 NIGHT</span>'
+        }
+
+        # إضافة الـ data-overworked لأسماء الممرضين
+        for n in range(num_nurses):
+            html += f'<tr class="nurse-row"><td class="nurse-header header-hover" data-overworked="{overworked_nurses[n]}" style="padding: 10px; font-weight: bold; color: white; border: 1px solid #34495e; text-align: center; background-color: #34495e;">👩‍⚕️ Nurse {chr(65+n)}</td>'
+            for d in range(num_days):
+                shift_val = schedule[n][d]
+                html += f'<td class="cell-data col-{d+1}" style="padding: 8px; text-align: center; border: 1px solid #eee;">{badges[shift_val]}</td>'
+            html += "</tr>"
+
+        html += """
+                </tbody>
+            </table>
+            </div>
+            <p style="text-align: center; font-size: 12px; color: #7f8c8d; margin-top: 10px; font-weight: bold;">
+                💡 Tip: <span style="color:#1abc9c">Hover</span> over Headers. <span style="color:#e74c3c">Red Hover</span> means a constraint is violated!
+            </p>
+        </div>
+
+        <script>
+            // تظليل الصف عند الوقوف على اسم الممرض (باقي الصف بياخد لون التظليل العادي)
+            document.querySelectorAll('.nurse-header').forEach(header => {
+                header.addEventListener('mouseenter', () => header.parentElement.classList.add('highlight-row'));
+                header.addEventListener('mouseleave', () => header.parentElement.classList.remove('highlight-row'));
+            });
+
+            // تظليل العمود عند الوقوف على رأس اليوم (باقي العمود بياخد لون التظليل العادي)
+            document.querySelectorAll('.day-header').forEach(header => {
+                header.addEventListener('mouseenter', () => {
+                    const col = header.dataset.col;
+                    document.querySelectorAll('.col-' + col).forEach(cell => cell.classList.add('highlight-col'));
+                });
+                header.addEventListener('mouseleave', () => {
+                    const col = header.dataset.col;
+                    document.querySelectorAll('.col-' + col).forEach(cell => cell.classList.remove('highlight-col'));
+                });
+            });
+        </script>
+        """
+        return html
+
+    if st.button("🚀 Generate Smart Roster"):
+        with st.spinner("AI is organizing the shifts..."):
+            random_schedule = np.random.choice([0, 1, 2, 3], size=(num_nurses, num_days))
+            
+            scheduler = NurseScheduling(num_nurses=num_nurses, days=num_days, population_size=30, generations=100)
             best_schedule = scheduler.run()
             
-            st.success("Done!")
+            def calculate_stats(sched):
+                overworked = 0
+                uncovered_days = 0
+                for nurse in sched:
+                    if np.count_nonzero(nurse) > max_shifts_allowed:
+                        overworked += 1
+                for d in range(num_days):
+                    column = sched[:, d]
+                    if not (1 in column and 2 in column and 3 in column):
+                        uncovered_days += 1
+                return overworked, uncovered_days
+
+            r_ov, r_un = calculate_stats(random_schedule)
+            o_ov, o_un = calculate_stats(best_schedule)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Shift Heatmap:**")
-                scheduler.plot_schedule(best_schedule)
-            with col2:
-                st.write("**Learning Curve:**")
-                scheduler.plot_history()
+            st.session_state.ns_before = random_schedule
+            st.session_state.ns_after = best_schedule
+            st.session_state.ns_stats = {"r_ov": r_ov, "r_un": r_un, "o_ov": o_ov, "o_un": o_un}
+
+    if st.session_state.ns_after is not None:
+        s = st.session_state.ns_stats
+        
+        stats_html = textwrap.dedent(f"""
+        <div style="display: flex; justify-content: space-around; background-color: white; border-radius: 15px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; border-left: 8px solid #8e44ad;">
+            <div style="text-align: center; width: 45%;">
+                <h4 style="color: #e74c3c;">❌ Random Schedule</h4>
+                <p style="margin:0; font-size:14px;">Overworked: <b>{s['r_ov']}</b> | Uncovered Days: <b>{s['r_un']}</b></p>
+            </div>
+            <div style="text-align: center; width: 45%;">
+                <h4 style="color: #2ecc71;">✨ AI Optimized</h4>
+                <p style="margin:0; font-size:14px;">Overworked: <b>{s['o_ov']}</b> | Uncovered Days: <b>{s['o_un']}</b></p>
+            </div>
+        </div>
+        """)
+        st.markdown(stats_html, unsafe_allow_html=True)
+
+        components.html(get_roster_html(st.session_state.ns_before, "❌ Before (Random)", False), height=400)
+        st.markdown("<br>", unsafe_allow_html=True)
+        components.html(get_roster_html(st.session_state.ns_after, "✨ After (AI Optimized)", True), height=400)
 
 # --- 6. Graph Coloring ---
 elif algorithm == "🎨 Graph Coloring":
